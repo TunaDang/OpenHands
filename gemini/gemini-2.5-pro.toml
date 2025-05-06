@@ -1,0 +1,6 @@
+[llm]
+model = "gemini-2.5-pro-preview-05-06"
+api_key = "${GEMINI_API_KEY}"  # Set this environment variable before running
+custom_llm_provider = "google"
+temperature = 0.0
+max_output_tokens = 2048 
