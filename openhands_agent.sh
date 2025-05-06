@@ -3,16 +3,11 @@ INSTANCE_ID_STRING="astropy__astropy-12907"
 # SAMPLES=1
 OUTPUT_BASE_DIR="openhands_results"
 
-# add cd to path
+# add current directory to path
 export PYTHONPATH=$PYTHONPATH:$(pwd)
+
 # Path to the JSON file containing instance details
-CODEARENA_INSTANCES_FILE="../../data/codearena_instances.json"
-
-# do the same for codearena repo so we can access monkeypatched swebench
-cd ../../
-
-export PYTHONPATH=$PYTHONPATH:$(pwd)
-cd baselines/OpenHands
+CODEARENA_INSTANCES_FILE="data/codearena_instances.json"
 
 # exit immediately if any of the commands fail
 set -e
@@ -20,8 +15,8 @@ set -e
 # --- Configuration ---
 # Specify the OpenHands agent class to use (e.g., CodeActAgent, ReadOnlyAgent)
 AGENT_CLASS="CodeActAgent"
-# Specify the LLM model configuration (ensure this matches your OpenHands setup)
-MODEL="gemini/gemini-2.5-pro" # Default, change if needed
+# Use the existing config.toml file
+CONFIG_FILE="config.toml"
 # Maximum iterations for the agent
 MAX_ITERATIONS=50
 # OpenHands entry point (adjust if your installation differs)
@@ -42,6 +37,11 @@ fi
 
 if [ ! -f "$CODEARENA_INSTANCES_FILE" ]; then
   echo "Error: CodeArena instances file not found: $CODEARENA_INSTANCES_FILE"
+  exit 1
+fi
+
+if [ ! -f "$CONFIG_FILE" ]; then
+  echo "Error: Configuration file not found: $CONFIG_FILE"
   exit 1
 fi
 
@@ -75,7 +75,7 @@ echo "Output Dir: $OUTPUT_DIR"
 echo "Repository: $REPO"
 echo "Base Commit: $BASE_COMMIT"
 echo "Agent Class: $AGENT_CLASS"
-echo "Model: $MODEL"
+echo "Config File: $CONFIG_FILE"
 echo "Max Iterations: $MAX_ITERATIONS"
 echo "---------------------"
 
@@ -145,7 +145,7 @@ echo "$INITIAL_PROMPT" > "$PROMPT_FILE"
 $OPENHANDS_ENTRY_POINT \
     --directory  "$REPO_DIR" \
     --agent-cls "$AGENT_CLASS" \
-    --llm-config "$MODEL" \
+    --config "$CONFIG_FILE" \
     --max-iterations "$MAX_ITERATIONS" \
     --file "$PROMPT_FILE"
 
