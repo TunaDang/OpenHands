@@ -2,6 +2,7 @@ import asyncio
 import copy
 import json
 import os
+import io
 import tempfile
 from typing import Any, Literal
 
@@ -204,7 +205,7 @@ def get_instance_docker_image(
         # swebench/sweb.eval.x86_64.django_1776_django-11333:v1
         docker_image_prefix = 'docker.io/swebench/'
         repo, name = instance_id.split('__')
-        image_name = f'swebench/sweb.eval.x86_64.{repo}_1776_{name}:latest'.lower()
+        image_name = f'tunadang/sweb.env.arm64.428468730904ff6b4232aa:latest'.lower()
         logger.debug(f'Using official SWE-Bench image: {image_name}')
         return image_name
     else:
@@ -693,7 +694,7 @@ def process_instance(
     output = EvalOutput(
         instance_id=instance.instance_id,
         instruction=instruction,
-        instance=instance.to_dict(),  # SWE Bench specific
+        instance=instance.to_dict(),
         test_result=test_result,
         metadata=metadata,
         history=histories,
@@ -729,13 +730,14 @@ if __name__ == '__main__':
         '--dataset',
         type=str,
         default='princeton-nlp/SWE-bench',
-        help='data set to evaluate on, either full-test or lite-test',
+        required=True,
+        help='Path to the local JSON dataset file or Hugging Face dataset name.',
     )
     parser.add_argument(
         '--split',
         type=str,
-        default='test',
-        help='split to evaluate on',
+        default=None,
+        help='Optional: split to evaluate on (e.g., "test"). Not used if loading a local file.',
     )
     parser.add_argument(
         '--mode',
@@ -746,12 +748,59 @@ if __name__ == '__main__':
     )
     args, _ = parser.parse_known_args()
 
-    # NOTE: It is preferable to load datasets from huggingface datasets and perform post-processing
-    # so we don't need to manage file uploading to OpenHands's repo
-    dataset = load_dataset(args.dataset, split=args.split)
-    swe_bench_tests = filter_dataset(dataset.to_pandas(), 'instance_id')
+    # Load dataset from local JSON file
+    logger.info(f'Loading dataset from local file: {args.dataset}')
+    try:
+        data_list = []
+        with open(args.dataset, 'r') as f:
+            # Read the entire file content
+            file_content = f.read()
+            # Replace NaN with null for JSON compatibility
+            # Note: This simple replacement might be insufficient if "NaN" appears within strings.
+            # A more robust regex or JSON library handling might be needed for complex cases.
+            corrected_content = file_content.replace(': NaN', ': null')
+            try:
+                # Parse the entire content as a single JSON object (expecting a list)
+                data_list = json.loads(corrected_content)
+                if not isinstance(data_list, list):
+                    raise ValueError("JSON file does not contain a list of objects.")
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to decode JSON: {e}")
+                # Attempt line-by-line parsing as a fallback, logging errors
+                logger.warning("Falling back to line-by-line JSON parsing due to main parsing error.")
+                data_list = []
+                corrected_content_lines = corrected_content.splitlines()
+                for i, line in enumerate(corrected_content_lines):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                        data_list.append(data)
+                    except json.JSONDecodeError as e_line:
+                        logger.error(f"Skipping line {i+1} due to JSON decode error: {e_line}\\nProblematic line: {line}")
+                        continue
+
+        if not data_list:
+            raise ValueError(f"No valid JSON objects could be parsed from {args.dataset}")
+
+        swe_bench_tests = pd.DataFrame(data_list)
+
+        # Ensure 'instance_id' exists for filtering
+        if 'instance_id' not in swe_bench_tests.columns:
+            raise ValueError("The JSON dataset must contain an 'instance_id' column.")
+        # Convert potential non-string NaNs or other problematic values to strings explicitly for relevant columns
+        for col in ['hints_text', 'bad_patch', 'bad_patch_author', 'Review', 'Review_Author']:
+            if col in swe_bench_tests.columns:
+                swe_bench_tests[col] = swe_bench_tests[col].astype(str)
+
+    except Exception as e:
+        logger.error(f"Failed to load dataset from {args.dataset}: {e}")
+        raise
+
+    swe_bench_tests = filter_dataset(swe_bench_tests, 'instance_id')
     logger.info(
-        f'Loaded dataset {args.dataset} with split {args.split}: {len(swe_bench_tests)} tasks'
+        f'Loaded dataset {args.dataset} (split: {args.split if args.split else "N/A"}): {len(swe_bench_tests)} tasks'
     )
     if 'SWE-Gym' in args.dataset:
         with open(
@@ -784,7 +833,8 @@ if __name__ == '__main__':
     _agent_cls = openhands.agenthub.Agent.get_cls(args.agent_cls)
 
     dataset_descrption = (
-        args.dataset.replace('/', '__') + '-' + args.split.replace('/', '__')
+        args.dataset.replace('/', '__') +
+        ('-' + args.split.replace('/', '__') if args.split else '')
     )
     metadata = make_metadata(
         llm_config,
