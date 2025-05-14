@@ -748,8 +748,19 @@ if __name__ == '__main__':
 
     # NOTE: It is preferable to load datasets from huggingface datasets and perform post-processing
     # so we don't need to manage file uploading to OpenHands's repo
-    dataset = load_dataset(args.dataset, split=args.split)
-    swe_bench_tests = filter_dataset(dataset.to_pandas(), 'instance_id')
+    ## TODO: add a control block for codearena
+    print(f"args.dataset: {args.dataset}")
+    if "codearena_instances.json" in args.dataset:
+        print(f"Loading dataset from codearena_instances.json")
+        # load json file with a path
+        dataset = pd.read_json(args.dataset)
+        swe_bench_tests = filter_dataset(dataset, 'instance_id')
+    else:
+        dataset = load_dataset(args.dataset, split=args.split)
+        swe_bench_tests = filter_dataset(dataset.to_pandas(), 'instance_id')
+
+    
+
     logger.info(
         f'Loaded dataset {args.dataset} with split {args.split}: {len(swe_bench_tests)} tasks'
     )
