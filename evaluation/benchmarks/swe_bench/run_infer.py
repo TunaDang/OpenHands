@@ -748,17 +748,20 @@ if __name__ == '__main__':
 
     # NOTE: It is preferable to load datasets from huggingface datasets and perform post-processing
     # so we don't need to manage file uploading to OpenHands's repo
-    ## TODO: add a control block for codearena
-    print(f"args.dataset: {args.dataset}")
     if "codearena_instances.json" in args.dataset:
         print(f"Loading dataset from codearena_instances.json")
         # load json file with a path
         dataset = pd.read_json(args.dataset)
+        # Notes: swe_bench_tests has 2 more entries (difficulty and environment_setup_commit) 
+        # than our codearena json, but I can't see any code referencing them, so they might not matter
+        # 1: add a difficulty entry to each json object (maybe put "15 min - 1 hour" as default; swebench ratio: 15 min - 1 hour: 261 (52.2%), <15 min fix: 194 (38.8%), 1-4 hours: 42 (8.4%), >4 hours: 3 (0.6%))
+        #  2: add a environment_setup_commit entry to each json object
         swe_bench_tests = filter_dataset(dataset, 'instance_id')
     else:
         dataset = load_dataset(args.dataset, split=args.split)
         swe_bench_tests = filter_dataset(dataset.to_pandas(), 'instance_id')
 
+    
     
 
     logger.info(
